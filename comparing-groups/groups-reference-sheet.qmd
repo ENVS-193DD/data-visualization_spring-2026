@@ -1,0 +1,599 @@
+---
+title: "Comparing groups"
+subtitle: "REFERENCE SHEET"
+format: 
+  pdf:
+    toc: true
+    toc-depth: 5
+    include-in-header: 
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+          commandchars=\\\{\},
+          breaklines, breaknonspaceingroup, breakanywhere
+        }
+execute:
+  message: false
+  warning: false
+  echo: false
+  fig-width: 8
+  fig-height: 4
+---
+
+```{r}
+#| label: packages
+
+library(tidyverse)
+library(flextable)
+library(ggridges)
+```
+
+```{r}
+#| label: data
+
+# reading in data
+wq <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/water-quality/wq_clean.csv") |> 
+  # reordering factor levels
+  mutate(site_name = fct_relevel(site_name,
+                                 "Phelps Bridge", "East Channel", "Venoco Bridge"))
+```
+
+```{r}
+#| label: plot-aesthetics
+
+# colors to use in all figures
+site_cols <- c(
+  "East Channel" = "orange2",
+  "Phelps Bridge" = "tomato3",
+  "Venoco Bridge" = "turquoise4"
+)
+
+# setting common theme elements
+theme_set(
+  theme_classic() +
+    theme(text = element_text(size = 12),
+          plot.title.position = "plot",
+          legend.position = "none") 
+)
+
+```
+
+
+# 1. Math
+
+## Mean
+
+$$
+\bar{y} = \frac{1}{n}\sum_{i = 1}^ny_i
+$$
+
+$\bar{y}$ is the sample mean, which is calculated as the sum of all observations $y_i$ divided by the number of observations ($n$).
+
+## Median
+
+The median is determined by finding the middle value. If $n$ is odd, the median is the middle value in the dataset. If $n$ is even, the median is the mean of the two middle values.
+
+## Standard deviation
+
+$$
+s = \sqrt{\frac{\sum(y_i - \bar{y})^2}{n - 1}}
+$$
+
+$s$ is the sample standard deviation, which is calculated as the square root of the sum of the squared difference between an observation $y_i$ and the sample mean $\bar{y}$ divided by the number of observations $n$ minus 1.
+
+## Variance
+
+$$
+s^2 = \frac{\sum(y_i - \bar{y})^2}{n - 1}
+$$
+
+Variance is calculated as the standard deviation squared. Note that the units of variance are the units squared (e.g. g^2^, m^2^, ppt^2^).
+
+Note that if you're describing spread in writing, it's usually best to go with standard deviation since the units are the same as the variable.
+
+# 2. Calculating central tendency and spread
+
+Prior to visualizing, it's sometimes helpful to actually calculate the metrics of central tendency (mean and median) and spread (standard deviation and variance) along with the sample size.
+
+```{r}
+#| label: wq-summary
+
+# creating new object from water quality
+salinity_summary <- wq |> 
+  # group by site
+  group_by(site_name) |> 
+  # calculate mean, median, standard deviation, variance, number of obs
+  summarize(mean_sal = mean(mean_salinity_ppt),
+            median_sal = median(mean_salinity_ppt),
+            sd_sal = sd(mean_salinity_ppt),
+            var_sal = var(mean_salinity_ppt),
+            n = length(mean_salinity_ppt)) |> 
+  # ungroup data frame
+  ungroup()
+
+# use flextable to create table
+flextable(salinity_summary) |> 
+  # change column names in table to be readable
+  set_header_labels(
+    site_name = "Site",
+    mean_sal = "Mean",
+    median_sal = "Median",
+    sd_sal = "Standard deviation",
+    var_sal = "Variance",
+    n = "Number of surveys"
+  ) |> 
+  # round any columns with numbers to one decimal point
+  colformat_double(j = c("mean_sal", "median_sal", "sd_sal", "var_sal"), 
+                   digits = 1) |> 
+  # setting column width of table
+  width(width = 1,
+        unit = "in")
+```
+
+# 3. Visualizing distributions
+
+The purpose of visualizing distributions is to represent the distribution of variable of interest.
+
+Note that the interpretation of these plots is more or less the same: Most salinity measurements from Phelps Bridge are low. Most salinity measurements from East Channel and Venoco Bridge are below 40 ppt.
+
+## Plots to start with
+
+### Histograms
+
+**Components**
+
+- x-axis: _continuous_ variable of interest
+- y-axis: counts
+- Column height represents number of observations falling into a given bin range on the x-axis
+
+**Pay attention to:** 
+
+- the shape of the distribution
+- the center of the distribution
+- the peak(s) of the distribution
+
+```{r}
+#| label: histogram
+
+# creating object for histogram
+histogram <- ggplot(data = wq,
+                    # x-axis: variable of interest
+                    # fill geometries by site
+                    mapping = aes(x = mean_salinity_ppt,
+                                  fill = site_name)) +
+  # histogram geometry
+  geom_histogram(bins = 8,             # using 8 bins
+                 color = "black") +    # coloring outline black
+  # creating different panels for each site
+  facet_wrap(~ site_name) +
+  # getting rid of space between columns and axis, adding space at top
+  scale_y_continuous(expand = expansion(mult = c(0, 0.025))) +
+  # filling columns
+  scale_fill_manual(values = site_cols) +
+  # relabelling axes, adding title
+  labs(x = "Salinity (ppt)",
+       y = "Count",
+       title = "Histograms")
+
+# displaying histogram
+histogram
+```
+
+Potential caption:
+
+**Figure 1. Distributions of salinity differ across sites.** Distributions of salinity (parts per thousand) shown in histograms for each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). Bars represent counts of observations falling in each bin along the x-axis.
+
+### Boxplots
+
+**Components:**
+
+- x-axis: categories (levels in a factor)
+- y-axis: variable of interest
+- middle line: median
+- bottom of box: first quartile (25th percentile)
+- top of box: third quartile (75th percentile)
+- whiskers: 1.5 $\times$ interquartile range
+- points: observation values outside 1.5 $\times$ interquartile range
+
+```{r}
+#| label: boxplots
+
+# creating object for boxplots
+boxplot <- ggplot(data = wq,
+                  # x-axis: site
+                  # y-axis: salinity
+                  # fill geometries by site
+                  mapping = aes(x = site_name,
+                                y = mean_salinity_ppt,
+                                fill = site_name)) +
+  # boxplot (and narrowing width)
+  geom_boxplot(width = 0.5) +
+  # filling geometries
+  scale_fill_manual(values = site_cols) +
+  # relabelling x- and y-axes, adding title
+  labs(x = "Site",
+       y = "Salinity (ppt)",
+       title = "Boxplot")
+
+# displaying object
+boxplot
+```
+
+Potential captions:
+
+**Figure 2. Median salinity differs across sites.** Boxplots representing median (middle line) salinity (parts per thousand) and 25th and 75th percentiles at each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). Whiskers represent observations within 1.5 $\times$ interquartile range, and points represent observations outside the range. 
+
+### Strip charts
+
+**Components:**
+
+- x-axis: categories (levels in a factor)
+- y-axis: variable of interest
+- geometry: jittered points
+
+**Pay attention to:**
+
+- the clusters of points, if any
+- position of points along the y-axis
+
+```{r}
+#| label: strip-chart
+
+# creating new object for jitter plot
+jitter <- ggplot(data = wq,
+                 # x-axis: site
+                 # y-axis: salinity
+                 # color geometries by site
+                 mapping = aes(x = site_name,
+                               y = mean_salinity_ppt,
+                               color = site_name)) +
+  # jitter with adjustments
+  geom_jitter(height = 0,     # no jitter along y-axis
+              alpha = 0.5,    # transparent shapes
+              width = 0.2,    # narrowing jitter
+              shape = 21) +   # open circles
+  # coloring 
+  scale_color_manual(values = site_cols) +
+  # relabelling x- and y-axes, adding title
+  labs(x = "Site",
+       y = "Salinity (ppt)",
+       title = "Strip chart")
+
+# displaying object
+jitter
+```
+
+Potential captions:
+
+**Figure 3. Median salinity differs across sites.** Boxplots representing median (middle line) salinity (parts per thousand) and 25th and 75th percentiles at each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). Whiskers represent observations within 1.5 $\times$ interquartile range, and points represent observations outside the range. 
+
+## Taking things a step further
+
+### Density plots
+
+**Components:**
+
+- x-axis: continuous variable of interest
+- y-axis: probability density
+- smoothed function representing the shape of the distribution
+- note: area under that smoothed function = 1
+
+**Pay attention to:**
+
+- the shape of the **distribution**
+- the center of the distribution
+- the peak(s) of the distribution
+
+```{r}
+#| label: density-plots
+
+# creating object for density
+density <- ggplot(data = wq, 
+                  # x-axis: variable of interest
+                  # filling geometries by site name
+                  mapping = aes(x = mean_salinity_ppt,
+                                fill = site_name)) +
+  # density plot
+  geom_density() +
+  # creating different panels for each site
+  facet_wrap(~ site_name) +
+  # getting rid of space between density function and axis, adding space at top
+  scale_y_continuous(expand = expansion(mult = c(0, 0.025))) +
+  # filling geometries
+  scale_fill_manual(values = site_cols) +
+  # relabelling axes, adding title
+  labs(x = "Salinity (ppt)",
+       y = "Density",
+       title = "Density plots")
+
+# displaying object
+density
+
+# creating object for density
+density_log1 <- ggplot(data = wq, 
+                       # x-axis: variable of interest
+                       # filling geometries by site name
+                       mapping = aes(x = log(mean_salinity_ppt + 1),
+                                     fill = site_name)) +
+  # density plot
+  geom_density() +
+  # creating different panels for each site
+  facet_wrap(~ site_name) +
+  # getting rid of space between density function and axis, adding space at top
+  scale_y_continuous(expand = expansion(mult = c(0, 0.025))) +
+  # filling geometries
+  scale_fill_manual(values = site_cols) +
+  # relabelling axes, adding title
+  labs(x = "log+1 salinity (ppt)",
+       y = "Density",
+       title = "Density plots (log+1 transformed)")
+
+# displaying object
+density_log1
+```
+
+Potential captions:
+
+**Figure 4. Distributions of salinity differ across sites.** Distributions of salinity (parts per thousand) shown in density plots for each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). 
+
+**Figure 5. Distributions of salinity differ across sites.** Distributions of log+1 transformed salinity (parts per thousand) shown in density plots for each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). 
+
+:::{.callout-note title="Use log+1 transformation with caution!"}
+The transformation can help with visualization (i.e. make it easier to pick out patterns), but can be tricky to interpret/analyze. Proceed with caution and ask yourself whether you really _need_ the transformation to see patterns.
+:::
+
+### Violin charts
+
+**Note:** violin charts are density plots that are mirrored.
+
+**Components:**
+
+- x-axis: categories (levels in a factor)
+- y-axis: variable of interest
+- geometry: jittered points
+
+**Pay attention to:**
+
+- wide or narrow parts of the violin
+- position of wide or narrow parts along y-axis
+
+```{r}
+#| label: violin
+
+# creating new object for violin
+violin <- ggplot(data = wq,
+                 # x-axis: site
+                 # y-axis: salinity
+                 # fill geometries by site
+                 mapping = aes(x = site_name,
+                               y = mean_salinity_ppt,
+                               fill = site_name)) +
+  # geometry for violin
+  geom_violin() +
+  # filling geometries
+  scale_fill_manual(values = site_cols) +
+  # relabelling x- and y-axes, adding title
+  labs(x = "Site",
+       y = "Salinity (ppt)",
+       title = "Violin plot")
+
+# displaying object
+violin
+
+# creating new object for violin
+violin_log1 <- ggplot(data = wq,
+                      # x-axis: site
+                      # y-axis: salinity
+                      # fill geometries by site
+                      mapping = aes(x = site_name,
+                                    y = log(mean_salinity_ppt + 1 ),
+                                    fill = site_name)) +
+  # geometry for violin
+  geom_violin() +
+  # filling geometries
+  scale_fill_manual(values = site_cols) +
+  # relabelling x- and y-axes, adding title
+  labs(x = "Site",
+       y = "log+1 salinity (ppt)",
+       title = "Violin plot (log+1 transformed)")
+
+# displaying object
+violin_log1
+```
+
+Potential captions:
+
+**Figure 6. Distributions of salinity differ across sites.** Distributions of salinity (parts per thousand) shown in violin plots for each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). 
+
+**Figure 7. Distributions of salinity differ across sites.** Distributions of log+1 transformed salinity (parts per thousand) shown in violin plots for each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). 
+
+
+:::{.callout-note title="Plot pitfalls"}
+
+Density plots, violin plots, and boxplots are appropriate if you have many observations per group (or level in a factor). If you have few observations, those plots will either 
+
+a) hide the fact that you have few observations (as in boxplots), 
+b) suggest the existence of values where there aren't any (as in density or violin plots)
+c) or some combination of both.
+
+There's no hard and fast rule for the number of observations that are appropriate. However, the solution to these problems is almost always to _show the underlying data_ in a jitter or something similar.
+
+:::
+
+# 4. Visualizing central tendency and spread
+
+## Medians
+
+Refer to the section on boxplots - these incorporate medians along with spread (quantiles).
+
+## Means
+
+**With standard deviation:**
+
+```{r}
+#| label: means-sd
+
+# starting with jitter plot from previous chunk
+jitter +
+  # adding summary information
+  geom_pointrange(data = salinity_summary,
+                  mapping = aes(x = site_name,
+                                y = mean_sal,
+                                ymin = mean_sal - sd_sal,
+                                ymax = mean_sal + sd_sal,
+                                color = site_name),
+                  size = 1,
+                  linewidth = 1) +
+  # adding different title
+  labs(title = "Strip chart with means and standard deviation")
+```
+
+**With standard error:**
+
+Note that standard error is calculated as:
+
+$$
+\frac{s}{\sqrt{n}}
+$$
+
+where $s$ is the standard devation and $n$ is the number of observations in the sample.
+
+```{r}
+#| label: means-se
+
+jitter +
+  # different geometry to calculate standard error 
+  stat_summary(geom = "pointrange",
+               # argument to calculate standard error
+               fun.data = mean_se,
+               size = 1,
+               linewidth = 1) +
+  labs(title = "Strip chart with means and SE")
+```
+
+**With 95% confidence interval:**
+
+```{r}
+#| label: means-ci
+
+jitter +
+  # different geometry to calculate a 95% confidence interval
+  stat_summary(geom = "pointrange",
+               # argument to calculate 95% confidence interval
+               fun.data = mean_cl_normal,
+               size = 1,
+               linewidth = 1) +
+  labs(title = "Strip chart with means and 95% confidence interval")
+```
+
+:::{.callout-note title="Be explicit about what whiskers mean!"}
+
+These plots all use the same geometry (`pointrange`) to represent the means and whiskers, but all three plots use whiskers to represent different values.
+
+Whenever making a plot with means and whiskers, it's _very_ important to be explicit about what values those whiskers represent in the axis label and/or the caption.
+
+:::
+
+Potential caption:
+
+**Figure 10. Mean salinity differs across sites.** Small open circles represent observations of salinity at each sampling point at each site (red: Phelps Bridge, orange: East Channel, and teal: Venoco Bridge). Large points represent means. Whiskers represent 95% confidence intervals around the mean.
+
+# 5. Making new types of plots and combining geometries
+
+There are lots of options to visualize variables to compare across groups. Uuse graph galleries like the [R Graph Gallery](https://r-graph-gallery.com/) or [From Data to Viz](https://www.data-to-viz.com/) to come up with new ideas to try.
+
+You can also combine different geometries and plots to represent data in a new way.
+
+This plot is called a **ridgeline plot** because the distributions resemble mountain ridges. Adding points to represent means and 95% confidence intervals adds a metric of central tendency to the plot.
+
+```{r}
+#| label: ridgeline-plot
+
+# creating new object for ridgeline
+ridges <- ggplot(data = wq,
+                 # x-axis: salinity
+                 # y-axis: site
+                 # fill geometries by site
+                 mapping = aes(x = mean_salinity_ppt,
+                               y = site_name,
+                               fill = site_name)) +
+  # ridges (scale makes ridges shorter so that they don't overlap)
+  geom_density_ridges(scale = 0.8) +
+  # adding means and 95% confidence intervals
+  stat_summary(geom = "pointrange",
+               fun.data = mean_cl_normal,
+               size = 0.75,
+               linewidth = 1) +
+  # filling geometries with color
+  scale_fill_manual(values = site_cols) +
+  # setting y-axis expansions
+  scale_y_discrete(expand = expansion(mult = c(0.01, 0.15))) +
+  # relabelling x- and y-axis
+  labs(x = "Salinity (ppt)",
+       y = "Site")
+
+# displaying object
+ridges
+```
+
+# 6. Saving figures
+
+Sometimes it is useful to save figures as files, either to test out the dimensions or to use the figures elsewhere. 
+
+You can save a figure as any file type (e.g. .jpg, .png, .svg, .pdf) using `ggsave()`.
+
+```{r}
+#| label: ggsave
+#| eval: false
+
+ggsave(
+  # file path to store figure
+  here::here("comparing-groups", "ridges.jpg"),
+  # object name
+  ridges,
+  # figure dimensions
+  width = 8,
+  height = 6,
+  units = "in",
+  # figure resolutions (good to start with 300 dpi aka dots per inch)
+  dpi = 300
+)
+```
+
+# 7. Analyses to compare metrics of central tendency across groups
+
+## Medians
+
+if comparing two groups: **Mann Whitney U**
+
+if comparing more than two groups: **Kruskal-Wallis**
+
+## Means
+
+if comparing two groups: **two-sample t-test**
+
+if comparing more than two groups: **analysis of variance (ANOVA)**
+
+# 8. Project work
+
+Get with your group members and discuss:
+
+- which of the plots above would be appropriate for your variables
+- which - if any - of these plots map onto the potential figures you designed in your work plan (if they don't, modify one of your potential figures to include a comparison of groups)
+- (if your main question is comparing a response variable across groups) decide which metric of central tendency and test you should be using (from part 6 of this sheet)
+
+Then, 
+
+- (if you haven't already) create a repo for your final project and make sure everyone is added as a collaborator
+- create `code` and `data` folders
+- create a file in your `code` folder for _drafts_ of your data visualization 
+- work together to try 1-2 of the above plots
+- work together to try 1-2 different plots from the [R Graph Gallery](https://r-graph-gallery.com/) or [From Data to Viz](https://www.data-to-viz.com/)
+
+:::{.callout-note title="All final projects must include at least one figure in which you are comparing your response variable across groups."}
+
+A figure in which you are comparing your response variable across groups might directly answer your question or might provide context for your question - either way, you should have at least _one_ figure comparing a metric of central tendency across groups.
+
+:::
+
+
