@@ -5,10 +5,17 @@ format:
   pdf:
     toc: true
     toc-depth: 5
+    include-in-header: 
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+          commandchars=\\\{\},
+          breaklines, breaknonspaceingroup, breakanywhere
+        }
 execute:
   message: false
   warning: false
-  echo: false
+  #echo: false
   fig-width: 8
   fig-height: 4
 ---
