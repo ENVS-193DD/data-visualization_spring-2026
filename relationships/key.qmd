@@ -20,15 +20,16 @@ change this to vegetation
 ```{r}
 library(ggrepel)
 library(tidyverse)
+library(janitor)
 
 birds <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/birds/birds.csv")
 
-weather <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/water-quality/NOAA-weather-data.csv") |> 
-  mutate(date = mdy(DATE),
-         month = month(date)) |> 
+weather <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/weather/4310193.csv") |> 
+  clean_names() |> 
+  mutate(month = month(date)) |> 
   group_by(month) |> 
-  mutate(total_monthly_precip_in = sum(PRCP, na.rm = TRUE),
-         mean_monthly_tmax_f = mean(TMAX, na.rm = TRUE)) |> 
+  mutate(total_monthly_precip_in = sum(prcp, na.rm = TRUE),
+         mean_monthly_tmax_f = mean(tmax, na.rm = TRUE)) |> 
   ungroup() |> 
   select(date, total_monthly_precip_in, mean_monthly_tmax_f) |> 
   distinct()
@@ -115,7 +116,8 @@ ggplot(data = shorebirds_wy2025,
                   segment.size = 0.5,
                   #max.overlaps = Inf,
                   force = 0.5,
-                  xlim  = as_date("2024-10-01")) +
+                  xlim  = as_date("2024-10-01"),
+                  show.legend = FALSE) +
   theme(panel.background = element_blank(),
         panel.grid = element_blank())
 
