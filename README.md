@@ -22,5 +22,3 @@ i'm adding stuff to my own readme here
 # Rendered output
 
 - [Reference sheet for comparing groups](https://github.com/ENVS-193DD/data-visualization_spring-2026/blob/main/comparing-groups/groups-reference-sheet.pdf)
-
-- here's another thing
