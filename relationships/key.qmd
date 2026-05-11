@@ -20,15 +20,16 @@ change this to vegetation
 ```{r}
 library(ggrepel)
 library(tidyverse)
+library(janitor)
 
 birds <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/birds/birds.csv")
 
-weather <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/water-quality/NOAA-weather-data.csv") |> 
-  mutate(date = mdy(DATE),
-         month = month(date)) |> 
+weather <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/weather/4310193.csv") |> 
+  clean_names() |> 
+  mutate(month = month(date)) |> 
   group_by(month) |> 
-  mutate(total_monthly_precip_in = sum(PRCP, na.rm = TRUE),
-         mean_monthly_tmax_f = mean(TMAX, na.rm = TRUE)) |> 
+  mutate(total_monthly_precip_in = sum(prcp, na.rm = TRUE),
+         mean_monthly_tmax_f = mean(tmax, na.rm = TRUE)) |> 
   ungroup() |> 
   select(date, total_monthly_precip_in, mean_monthly_tmax_f) |> 
   distinct()
@@ -120,10 +121,11 @@ ggplot(data = shorebirds_wy2025,
         panel.grid = element_blank())
 
 ggplot(data = shorebirds_all,
-       mapping = aes(x = mean_monthly_tmax_f,
+       mapping = aes(x = total_monthly_precip_in,
                      y = total)) +
   geom_point() +
   facet_wrap(~ species,
              scales = "free_y")
+# is this a "causal" relationship or do these variables "co-vary"?
 ```
 
