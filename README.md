@@ -20,3 +20,5 @@ This is a repository for data visualization options.
 # Rendered output
 
 - [Reference sheet for comparing groups](https://github.com/ENVS-193DD/data-visualization_spring-2026/blob/main/comparing-groups/groups-reference-sheet.pdf)
+
+This README will be updated with reference sheets for comparing two continuous/discrete variables next week.
