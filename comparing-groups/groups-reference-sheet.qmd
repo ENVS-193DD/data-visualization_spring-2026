@@ -548,7 +548,7 @@ You can save a figure as any file type (e.g. .jpg, .png, .svg, .pdf) using `ggsa
 
 ggsave(
   # file path to store figure
-  here::here("comparing-groups", "ridges.jpg"),
+  here::here("comparing-groups", "figures", "ridges.jpg"),
   # object name
   ridges,
   # figure dimensions
