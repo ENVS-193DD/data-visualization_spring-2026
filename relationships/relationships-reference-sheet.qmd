@@ -1,0 +1,228 @@
+---
+title: "Relationships between two variables"
+subtitle: "REFERENCE SHEET"
+format: 
+  pdf:
+    toc: true
+    toc-depth: 5
+    include-in-header: 
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{
+          commandchars=\\\{\},
+          breaklines, breaknonspaceingroup, breakanywhere
+        }
+execute:
+  message: false
+  warning: false
+  echo: false
+  fig-width: 8
+  fig-height: 6
+---
+
+```{r}
+#| label: packages
+
+library(tidyverse)
+library(janitor)
+library(ggrepel)
+```
+
+```{r}
+#| label: data
+
+birds <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/birds/birds.csv")
+
+weather <- read_csv("https://raw.githubusercontent.com/ENVS-193DD/datasets/refs/heads/main/weather/4310193.csv")
+
+weather_clean <- weather |> 
+  # clean column names
+  clean_names() |> 
+  # extract month
+  mutate(month = month(date)) |> 
+  # calculate total montly precipitation and mean monthly max temp
+  group_by(month) |> 
+  mutate(total_monthly_precip_in = sum(prcp, na.rm = TRUE),
+         mean_monthly_tmax_f = mean(tmax, na.rm = TRUE)) |> 
+  ungroup() |> 
+  # select columns of interest
+  select(date, total_monthly_precip_in, mean_monthly_tmax_f) |> 
+  # filter to only include unique values
+  distinct()
+```
+
+```{r}
+#| label: wrangling-shorebirds-2025wy
+
+# creating new object from birds
+shorebirds <- birds |> 
+  # filter to only include shorebords and observations in 2025 water year
+  filter(e_bird_group == "Shorebirds") |> 
+  # calculate total counts per species for a survey
+  group_by(observation_date, species) |> 
+  summarize(total = sum(count)) |> 
+  ungroup() |> 
+  # taking out species only seen once
+  filter(!(species %in% c("Peep sp.", "Sandpiper sp.", "Dowitcher sp.", 
+                          "Wilson's Snipe", "Red-necked Phalarope"))) |> 
+  # fill in any missing observation date and species combinations with 0
+  complete(observation_date, species,
+           fill = list(total = 0)) |> 
+  # add column to denote family
+  mutate(family = case_when(
+    species %in% c("Black-necked Stilt", "American Avocet") ~ "Recurvirostridae",
+    species %in% c("Greater Yellowlegs", "Lesser Yellowlegs", 
+                   "Killdeer", "Long-billed Curlew",
+                   "Least Sandpiper", "Long-billed Dowitcher", 
+                   "Western Sandpiper", "Pectoral Sandpiper", 
+                   "Dunlin", "Sanderling", "Solitary Sandpiper",
+                   "Spotted Sandpiper", "Whimbrel",
+                   "Willet") ~ "Scolopacidae",
+    species %in% c("Semipalmated Plover", "Western Snowy Plover") ~ "Charadriidae"
+  )) |> 
+  # add a column to direct label lines
+  group_by(species) |> 
+  mutate(species_label = case_when(
+    observation_date == min(observation_date) ~ species
+  )) |> 
+  ungroup() |> 
+  mutate(species = fct_reorder(species, total, .fun = median, .desc = TRUE)) |> 
+  # join with weather data
+  left_join(weather_clean, by = c("observation_date" = "date"))
+```
+
+
+improving timeseries plots
+birds: color by migratory or non-migratory? or by genus
+change this to vegetation
+
+
+
+```{r}
+#| label: wrangling-all-shorebirds
+
+shorebirds_wy2025 <- shorebirds |> 
+  filter(between(observation_date, as_date("2024-10-01"), as_date("2025-09-30"))) |> 
+  # add a column to direct label lines
+  group_by(species) |> 
+  mutate(species_label = case_when(
+    observation_date == min(observation_date) ~ species
+  )) |> 
+  # filter out any species that don't appear in the 2025 water year
+  filter(sum(total) != 0) |> 
+  # ungroup data frame
+  ungroup() 
+```
+
+```{r}
+#| label: plot-aesthetics
+
+colors <- c(
+  "#0077BB",
+  "#33BBEE",
+  "#009988",
+  "#EE7733",
+  "#CC3311",
+  "#EE3377",
+  "#AA4499"
+)
+
+theme_set(
+  theme_bw() +
+    theme(text = element_text(size = 12))
+)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 10
+#| 
+library(cowplot)
+#| 
+ggplot(data = shorebirds_wy2025,
+       mapping = aes(x = observation_date,
+                     y = total,
+                     color = species,
+                     group = species)) +
+  geom_point() +
+  geom_line() +
+  scale_x_date(expand = expansion(mult = c(0.3, 0.1)),
+               limits = c(as_date("2024-10-01"), NA),
+               breaks = as_date(c("2024-10-01", "2024-11-01", "2024-12-01", 
+                                  "2025-01-01", "2025-02-01", "2025-03-01", 
+                                  "2025-04-01", "2025-05-01", "2025-06-01", 
+                                  "2025-07-01", "2025-08-01", "2025-09-01")),
+               date_labels = "%b") +
+  scale_y_continuous(expand = expansion(mult = c(0.01, 0.1))) +
+  geom_text_repel(mapping = aes(label = species_label),
+                  seed = 100,
+                  # right align labels
+                  hjust = 1,
+                  # repel in y direction only
+                  direction = "y",
+                  # linetype
+                  segment.linetype = 3,
+                  # nudge starting point 5 units to left
+                  nudge_x = -1,
+                  nudge_y = 1,
+                  # width
+                  segment.size = 0.5,
+                  max.overlaps = Inf,
+                  force = 0.5,
+                  xlim  = as_date("2024-10-01"),
+                  show.legend = FALSE) +
+  geom_vline(xintercept = as_date("2025-01-26"),
+             linetype = "dashed") +
+    draw_label("First major rain event\n(3.40 in)",
+             #fontfamily = annotate_text,
+             x =  as_date("2025-01-20"),   
+             y = 85,
+             hjust = 1,
+             size = 14) +
+  geom_vline(xintercept = as_date("2025-03-12"),
+             linetype = "dashed") +
+    draw_label("Last major rain event\n(1.11 in)",
+             #fontfamily = annotate_text,
+             x =  as_date("2025-03-17"),   
+             hjust = 0,
+             y = 85,
+             size = 14) +
+  scale_color_manual(values = colors) +
+  labs(x = "Date",
+       y = "Total counts",
+       color = "Family") +
+  theme(legend.position = "none",
+        panel.grid = element_blank(),
+        legend.background = element_blank())
+ggsave("image.svg")
+
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+
+ggplot(data = shorebirds,
+       mapping = aes(x = total_monthly_precip_in,
+                     y = total,
+                     color = family)) +
+  geom_point() +
+  #scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+  facet_wrap(~ species,
+             scales = "free_y") +
+  scale_color_manual(values = colors) +
+  labs(x = "Total monthly precipitation (in)",
+       y = "Total counts",
+       color = "Family")
+# is this a "causal" relationship or do these variables "co-vary"?
+```
+
+```{r}
+bird <- shorebirds |> 
+  filter(species == "Western Sandpiper")
+
+cor.test(bird$total, bird$total_monthly_precip_in,
+         method = "spearman")
+```
+
